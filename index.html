@@ -22,7 +22,7 @@ const settings = {
               // min x  y   max x    y
     clientRange: [ 0, 0, 500, 500 ],
                   // min x  y      max x    y
-    complexRange: [ -2.2, -1.2, 0.8, 1.2 ],
+    complexRange: [ -2.2, -1.4, 0.8, 1.4 ],
 };
 
 // translate an on-screen ("client") x/y coordinate into complex
@@ -75,12 +75,37 @@ function mandelbrot(c) {
     return iterations;
 }
 
-const render = gpu.createKernel(function(clientX, clientY) {
-    const maxIterations = 100;
-    const escapeMagnitude = 2;
+function renderCpu() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 500;
+    canvas.height = 500;
 
-    const client = [ clientX, clientY ];
+    const ctx = canvas.getContext("2d");
+
     const clientRange = [ 0, 0, 500, 500 ];
+
+    for (let x = 0; x < canvas.width; x++) {
+        for (let y = 0; y < canvas.height; y++) {
+            let c = translateGpu([ x, y ], clientRange, [ -2.2, -1.4, 0.8, 1.4 ]);
+            let mandel = mandelbrot(c);
+
+            const color = Math.floor((mandel / 100) * 255);
+
+            ctx.fillStyle = `rgba(${color}, ${color}, ${color}, 1)`;
+            ctx.fillRect(x,y,1,1);
+        }
+    }
+
+    return canvas;
+}
+
+function renderGpu() {
+    const render = gpu.createKernel(function(clientX, clientY) {
+        const maxIterations = 100;
+        const escapeMagnitude = 2;
+
+        const client = [ clientX, clientY ];
+        const clientRange = [ 0, 0, 500, 500 ];
 /*
     const cxMin = -2.2;
     const cxMax =  0.8;
@@ -92,31 +117,25 @@ const render = gpu.createKernel(function(clientX, clientY) {
 
     */
 
-    let iterations = 0;
-    let c = translateGpu(client, clientRange, [ -2.2, -1.2, 0.8, 1.2 ]);
-    let z = [ 0, 0 ];
+        let c = translateGpu([ this.thread.x, this.thread.y ], clientRange, [ -2.2, -1.4, 0.8, 1.4 ]);
+        let mandel = mandelbrot(c) * 1.0;
 
-    do {
-        z = add(power(z, [ 2, 0 ]), c);
-        iterations++;
-    } while (iterations < maxIterations && magnitude(z) < escapeMagnitude);
+        this.color((mandel / 100.0), (mandel / 100.0), (mandel / 100.0), 1);
+    })
+      .setOutput([clientSize.x, clientSize.y])
+      .addFunction(translateGpu, { argumentTypes: { client: 'Array(2)', clientRangex: 'Array(4)', complexRange: 'Array(4)' }, returnType: 'Array(2)' })
+      .addFunction(add, { argumentTypes: { c1: 'Array(2)', c2: 'Array(2)' }, returnType: 'Array(2)' })
+      .addFunction(multiply, { argumentTypes: { c1: 'Array(2)', c2: 'Array(2)' }, returnType: 'Array(2)' })
+      .addFunction(power, { argumentTypes: { c1: 'Array(2)', c2: 'Array(2)' }, returnType: 'Array(2)' })
+      .addFunction(magnitude, { argumentTypes: { c: 'Array(2)' }, returnType: 'Number' })
+      .addFunction(mandelbrot, { argumentTypes: { c: 'Array(2)' }, returnType: 'Number' })
+      .setGraphical(true);
 
-    let foobar = mandelbrot(c) * 1.0;
+    render(clientSize.x, clientSize.y);
+    return render.getCanvas();
+}
 
-//    this.color((foobar / 100.0), (foobar / 100.0), (foobar / 100.0), 1);
-})
-  .setOutput([clientSize.x, clientSize.y])
-  .addFunction(translateGpu, { argumentTypes: { client: 'Array(2)', clientRangex: 'Array(4)', complexRange: 'Array(4)' }, returnType: 'Array(2)' })
-  .addFunction(add, { argumentTypes: { c1: 'Array(2)', c2: 'Array(2)' }, returnType: 'Array(2)' })
-  .addFunction(multiply, { argumentTypes: { c1: 'Array(2)', c2: 'Array(2)' }, returnType: 'Array(2)' })
-  .addFunction(power, { argumentTypes: { c1: 'Array(2)', c2: 'Array(2)' }, returnType: 'Array(2)' })
-  .addFunction(magnitude, { argumentTypes: { c: 'Array(2)' }, returnType: 'Number' })
-  .addFunction(mandelbrot, { argumentTypes: { c: 'Array(2)' }, returnType: 'Number' })
-  .setGraphical(true);
-
-
-render(clientSize.x, clientSize.y);
-const canvas = render.getCanvas();
+const canvas = renderGpu();
 document.getElementsByTagName('body')[0].appendChild(canvas);
 
 canvas.addEventListener("mousemove", function(event) {
