@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<head>
+<style>
+body {
+    margin: 0;
+    padding: 0;
+}
+</style>
+</head>
+
+<body>
+<script src="gpu-browser.min.js"></script>
+<script src="complex.js"></script>
+<script>
+const clientSize = { x: 500, y: 500 };
+
+const gpu = new GPU();
+
+const settings = {
+              // min x  y   max x    y
+    clientRange: [ 0, 0, 500, 500 ],
+                  // min x  y      max x    y
+    complexRange: [ -2.2, -1.2, 0.8, 1.2 ],
+};
+
+// translate an on-screen ("client") x/y coordinate into complex
+// x + iy coordinates
+function translate(x, y) {
+    return translateGpu([ x, y ], settings.clientRange, settings.complexRange);
+/*
+    return [
+        settings.cxMin + (settings.cxMax - settings.cxMin) * (x / settings.clientX),
+        settings.cyMin + (settings.cyMax - settings.cyMin) * (y / settings.clientY)
+    ];
+    */
+}
+
+function translateGpu(client, clientRange, complexRange) {
+    const clientX = client[0];
+    const clientY = client[1];
+
+    const clientMinX = clientRange[0];
+    const clientMinY = clientRange[1];
+    const clientMaxX = clientRange[2];
+    const clientMaxY = clientRange[3];
+
+    const complexMinX = complexRange[0];
+    const complexMinY = complexRange[1];
+    const complexMaxX = complexRange[2];
+    const complexMaxY = complexRange[3];
+
+    // the complex coordinates are the start of the range plus the size
+    // of the complex range times the ratio of the client coordinate to
+    // the size of the range of client coordinates
+    return [
+        complexMinX + (complexMaxX - complexMinX) * (clientX / (clientMaxX - clientMinX)),
+        complexMinY + (complexMaxY - complexMinY) * (clientY / (clientMaxY - clientMinY))
+    ];
+}
+
+function mandelbrot(c) {
+    const maxIterations = 100;
+    const escapeMagnitude = 2;
+
+    let iterations = 0;
+    let z = [ 0, 0 ];
+
+    do {
+        z = add(power(z, [ 2, 0 ]), c);
+        iterations++;
+    } while (iterations < maxIterations && magnitude(z) < escapeMagnitude);
+
+    return iterations;
+}
+
+const render = gpu.createKernel(function(clientX, clientY) {
+    const maxIterations = 100;
+    const escapeMagnitude = 2;
+
+    const client = [ clientX, clientY ];
+    const clientRange = [ 0, 0, 500, 500 ];
+/*
+    const cxMin = -2.2;
+    const cxMax =  0.8;
+    const cyMin = -1.2;
+    const cyMax =  1.2;
+
+    let x = this.thread.x / sizeX;
+    let y = this.thread.y / sizeY;
+
+    */
+
+    let iterations = 0;
+    let c = translateGpu(client, clientRange, [ -2.2, -1.2, 0.8, 1.2 ]);
+    let z = [ 0, 0 ];
+
+    do {
+        z = add(power(z, [ 2, 0 ]), c);
+        iterations++;
+    } while (iterations < maxIterations && magnitude(z) < escapeMagnitude);
+
+    let foobar = mandelbrot(c) * 1.0;
+
+//    this.color((foobar / 100.0), (foobar / 100.0), (foobar / 100.0), 1);
+})
+  .setOutput([clientSize.x, clientSize.y])
+  .addFunction(translateGpu, { argumentTypes: { client: 'Array(2)', clientRangex: 'Array(4)', complexRange: 'Array(4)' }, returnType: 'Array(2)' })
+  .addFunction(add, { argumentTypes: { c1: 'Array(2)', c2: 'Array(2)' }, returnType: 'Array(2)' })
+  .addFunction(multiply, { argumentTypes: { c1: 'Array(2)', c2: 'Array(2)' }, returnType: 'Array(2)' })
+  .addFunction(power, { argumentTypes: { c1: 'Array(2)', c2: 'Array(2)' }, returnType: 'Array(2)' })
+  .addFunction(magnitude, { argumentTypes: { c: 'Array(2)' }, returnType: 'Number' })
+  .addFunction(mandelbrot, { argumentTypes: { c: 'Array(2)' }, returnType: 'Number' })
+  .setGraphical(true);
+
+
+render(clientSize.x, clientSize.y);
+const canvas = render.getCanvas();
+document.getElementsByTagName('body')[0].appendChild(canvas);
+
+canvas.addEventListener("mousemove", function(event) {
+    const complex = translate(event.clientX, event.clientY);
+    const mandel = mandelbrot(complex);
+    console.log({ clientX: event.clientX, clientY: event.clientY, cX: complex[0], cY: complex[1], mandel });
+});
+</script>
