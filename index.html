@@ -60,12 +60,33 @@ function translateGpu(client, clientRange, complexRange) {
     ];
 }
 
-function mandelbrot(c) {
+function mandelbrot(x, y) {
     const maxIterations = 100;
     const escapeMagnitude = 2;
+    const clientRange = [ 0, 0, 500, 500 ];
+
+    let c = translateGpu([ x, y ], clientRange, [ -2.2, -1.4, 0.8, 1.4 ]);
 
     let iterations = 0;
     let z = [ 0, 0 ];
+
+    do {
+        z = add(power(z, [ 2, 0 ]), c);
+        iterations++;
+    } while (iterations < maxIterations && magnitude(z) < escapeMagnitude);
+
+    return iterations;
+}
+
+function julia(x, y, debug) {
+    const maxIterations = 100;
+    const escapeMagnitude = 2;
+    const clientRange = [ 0, 0, 500, 500 ];
+
+    let iterations = 0;
+    let z = translateGpu([ x, y ], clientRange, [ 0 - escapeMagnitude, 0 - escapeMagnitude, escapeMagnitude, escapeMagnitude ]);
+    //let c = [ -0.7, 0.27015 ];
+    let c = [ -0.4, 0.6 ];
 
     do {
         z = add(power(z, [ 2, 0 ]), c);
@@ -82,14 +103,12 @@ function renderCpu() {
 
     const ctx = canvas.getContext("2d");
 
-    const clientRange = [ 0, 0, 500, 500 ];
-
     for (let x = 0; x < canvas.width; x++) {
         for (let y = 0; y < canvas.height; y++) {
-            let c = translateGpu([ x, y ], clientRange, [ -2.2, -1.4, 0.8, 1.4 ]);
-            let mandel = mandelbrot(c);
-
-            const color = Math.floor((mandel / 100) * 255);
+//            let mandel = mandelbrot(x, y);
+//            const color = Math.floor((mandel / 100) * 255);
+            let jul = julia(x, y);
+            const color = (jul == 100) ? 0 : Math.floor((jul / 100) * 255);
 
             ctx.fillStyle = `rgba(${color}, ${color}, ${color}, 1)`;
             ctx.fillRect(x,y,1,1);
@@ -105,7 +124,6 @@ function renderGpu() {
         const escapeMagnitude = 2;
 
         const client = [ clientX, clientY ];
-        const clientRange = [ 0, 0, 500, 500 ];
 /*
     const cxMin = -2.2;
     const cxMax =  0.8;
@@ -117,8 +135,7 @@ function renderGpu() {
 
     */
 
-        let c = translateGpu([ this.thread.x, this.thread.y ], clientRange, [ -2.2, -1.4, 0.8, 1.4 ]);
-        let mandel = mandelbrot(c) * 1.0;
+        let mandel = mandelbrot(this.thread.x, this.thread.y) * 1.0;
 
         this.color((mandel / 100.0), (mandel / 100.0), (mandel / 100.0), 1);
     })
@@ -135,12 +152,18 @@ function renderGpu() {
     return render.getCanvas();
 }
 
-const canvas = renderGpu();
+const canvas = renderCpu();
 document.getElementsByTagName('body')[0].appendChild(canvas);
 
 canvas.addEventListener("mousemove", function(event) {
-    const complex = translate(event.clientX, event.clientY);
-    const mandel = mandelbrot(complex);
-    console.log({ clientX: event.clientX, clientY: event.clientY, cX: complex[0], cY: complex[1], mandel });
+//    const complex = translate(event.clientX, event.clientY);
+//    const mandel = mandelbrot(complex);
+//    console.log({ clientX: event.clientX, clientY: event.clientY, cX: complex[0], cY: complex[1], mandel });
+
+    const clientRange = [ 0, 0, 500, 500 ];
+    const escapeMagnitude = 2;
+    let z = translateGpu([ event.clientX, event.clientY ], clientRange, [ 0 - escapeMagnitude, 0 - escapeMagnitude, escapeMagnitude, escapeMagnitude ]);
+    const jul = julia(event.clientX, event.clientY, true);
+    console.log({ clientX: event.clientX, clientY: event.clientY, zX: z[0], zY: z[1], jul });
 });
 </script>
