@@ -11,9 +11,13 @@ body {
 </head>
 
 <body>
+<canvas id="fractal" />
+
 <script src="gpu-browser.min.js"></script>
 <script src="complex.js"></script>
 <script>
+const canvasId = "fractal";
+
 let clientRange = [ 0, 0, 0, 0 ];
 
 window.addEventListener('DOMContentLoaded', init);
@@ -84,9 +88,6 @@ function renderCpu() {
     canvas.width = clientRange[2] - clientRange[0];
     canvas.height = clientRange[3] - clientRange[1];
 
-    console.log(canvas.width);
-    console.log(canvas.height);
-
     const ctx = canvas.getContext("2d");
 
     for (let x = 0; x < canvas.width; x++) {
@@ -106,6 +107,7 @@ function renderCpu() {
 
 function renderGpu() {
     const gpu = new GPU();
+    const clientSize = [ 500, 500 ];
     const render = gpu.createKernel(function(clientX, clientY) {
         const maxIterations = 100;
         const escapeMagnitude = 2;
@@ -151,8 +153,18 @@ function mouseOver(event) {
 }
 
 function render() {
+    const body = document.getElementsByTagName("body")[0];
+    console.log(body);
+
     const canvas = renderCpu();
-    document.getElementsByTagName('body')[0].appendChild(canvas);
+    console.log(canvas);
+
+    canvas.setAttribute("id", canvasId);
     canvas.addEventListener("mousemove", mouseOver);
+
+    const stale = document.getElementById(canvasId);
+    console.log(stale);
+
+    body.replaceChild(canvas, stale);
 }
 </script>
