@@ -14,42 +14,21 @@ body {
 <script src="gpu-browser.min.js"></script>
 <script src="complex.js"></script>
 <script>
-const clientSize = { x: 500, y: 500 };
+let clientRange = [ 0, 0, 0, 0 ];
 
-const gpu = new GPU();
+window.addEventListener('DOMContentLoaded', init);
+window.addEventListener('resize', init);
 
-const settings = {
-              // min x  y   max x    y
-    clientRange: [ 0, 0, 500, 500 ],
-                  // min x  y      max x    y
-    complexRange: [ -2.2, -1.4, 0.8, 1.4 ],
-};
-
-// translate an on-screen ("client") x/y coordinate into complex
-// x + iy coordinates
-function translate(x, y) {
-    return translateGpu([ x, y ], settings.clientRange, settings.complexRange);
-/*
-    return [
-        settings.cxMin + (settings.cxMax - settings.cxMin) * (x / settings.clientX),
-        settings.cyMin + (settings.cyMax - settings.cyMin) * (y / settings.clientY)
-    ];
-    */
+function init() {
+    clientRange[2] = window.innerWidth;
+    clientRange[3] = window.innerHeight;
+    render();
 }
 
-function translateGpu(client, clientRange, complexRange) {
-    const clientX = client[0];
-    const clientY = client[1];
-
-    const clientMinX = clientRange[0];
-    const clientMinY = clientRange[1];
-    const clientMaxX = clientRange[2];
-    const clientMaxY = clientRange[3];
-
-    const complexMinX = complexRange[0];
-    const complexMinY = complexRange[1];
-    const complexMaxX = complexRange[2];
-    const complexMaxY = complexRange[3];
+function translateClientToFractal(
+    [ clientX, clientY ],
+    [ clientMinX, clientMinY, clientMaxX, clientMaxY ],
+    [ complexMinX, complexMinY, complexMaxX, complexMaxY ]) {
 
     // the complex coordinates are the start of the range plus the size
     // of the complex range times the ratio of the client coordinate to
@@ -63,9 +42,11 @@ function translateGpu(client, clientRange, complexRange) {
 function mandelbrot(x, y) {
     const maxIterations = 100;
     const escapeMagnitude = 2;
-    const clientRange = [ 0, 0, 500, 500 ];
 
-    let c = translateGpu([ x, y ], clientRange, [ -2.2, -1.4, 0.8, 1.4 ]);
+    let c = translateClientToFractal(
+        [ x, y ],
+        clientRange,
+        [ -2.2, -1.4, 0.8, 1.4 ]);
 
     let iterations = 0;
     let z = [ 0, 0 ];
@@ -81,10 +62,12 @@ function mandelbrot(x, y) {
 function julia(x, y, debug) {
     const maxIterations = 100;
     const escapeMagnitude = 2;
-    const clientRange = [ 0, 0, 500, 500 ];
 
     let iterations = 0;
-    let z = translateGpu([ x, y ], clientRange, [ 0 - escapeMagnitude, 0 - escapeMagnitude, escapeMagnitude, escapeMagnitude ]);
+    let z = translateClientToFractal(
+        [ x, y ],
+        clientRange,
+        [ 0 - escapeMagnitude, 0 - escapeMagnitude, escapeMagnitude, escapeMagnitude ]);
     //let c = [ -0.7, 0.27015 ];
     let c = [ -0.4, 0.6 ];
 
@@ -98,8 +81,11 @@ function julia(x, y, debug) {
 
 function renderCpu() {
     const canvas = document.createElement('canvas');
-    canvas.width = 500;
-    canvas.height = 500;
+    canvas.width = clientRange[2] - clientRange[0];
+    canvas.height = clientRange[3] - clientRange[1];
+
+    console.log(canvas.width);
+    console.log(canvas.height);
 
     const ctx = canvas.getContext("2d");
 
@@ -119,6 +105,7 @@ function renderCpu() {
 }
 
 function renderGpu() {
+    const gpu = new GPU();
     const render = gpu.createKernel(function(clientX, clientY) {
         const maxIterations = 100;
         const escapeMagnitude = 2;
@@ -140,7 +127,7 @@ function renderGpu() {
         this.color((mandel / 100.0), (mandel / 100.0), (mandel / 100.0), 1);
     })
       .setOutput([clientSize.x, clientSize.y])
-      .addFunction(translateGpu, { argumentTypes: { client: 'Array(2)', clientRangex: 'Array(4)', complexRange: 'Array(4)' }, returnType: 'Array(2)' })
+      .addFunction(translateClientToFractal, { argumentTypes: { client: 'Array(2)', clientRangex: 'Array(4)', complexRange: 'Array(4)' }, returnType: 'Array(2)' })
       .addFunction(add, { argumentTypes: { c1: 'Array(2)', c2: 'Array(2)' }, returnType: 'Array(2)' })
       .addFunction(multiply, { argumentTypes: { c1: 'Array(2)', c2: 'Array(2)' }, returnType: 'Array(2)' })
       .addFunction(power, { argumentTypes: { c1: 'Array(2)', c2: 'Array(2)' }, returnType: 'Array(2)' })
@@ -152,18 +139,20 @@ function renderGpu() {
     return render.getCanvas();
 }
 
-const canvas = renderCpu();
-document.getElementsByTagName('body')[0].appendChild(canvas);
-
-canvas.addEventListener("mousemove", function(event) {
+function mouseOver(event) {
 //    const complex = translate(event.clientX, event.clientY);
 //    const mandel = mandelbrot(complex);
 //    console.log({ clientX: event.clientX, clientY: event.clientY, cX: complex[0], cY: complex[1], mandel });
 
-    const clientRange = [ 0, 0, 500, 500 ];
     const escapeMagnitude = 2;
-    let z = translateGpu([ event.clientX, event.clientY ], clientRange, [ 0 - escapeMagnitude, 0 - escapeMagnitude, escapeMagnitude, escapeMagnitude ]);
+    let z = translateClientToFractal([ event.clientX, event.clientY ], clientRange, [ 0 - escapeMagnitude, 0 - escapeMagnitude, escapeMagnitude, escapeMagnitude ]);
     const jul = julia(event.clientX, event.clientY, true);
     console.log({ clientX: event.clientX, clientY: event.clientY, zX: z[0], zY: z[1], jul });
-});
+}
+
+function render() {
+    const canvas = renderCpu();
+    document.getElementsByTagName('body')[0].appendChild(canvas);
+    canvas.addEventListener("mousemove", mouseOver);
+}
 </script>
