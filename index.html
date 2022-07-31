@@ -29,26 +29,22 @@ function init() {
     render();
 }
 
-function translateClientToFractal(
-    [ clientX, clientY ],
-    [ clientMinX, clientMinY, clientMaxX, clientMaxY ],
-    [ complexMinX, complexMinY, complexMaxX, complexMaxY ]) {
-
+function translateClientToFractal(clientCoords, clientRange, fractalRange) {
     // the complex coordinates are the start of the range plus the size
     // of the complex range times the ratio of the client coordinate to
     // the size of the range of client coordinates
     return [
-        complexMinX + (complexMaxX - complexMinX) * (clientX / (clientMaxX - clientMinX)),
-        complexMinY + (complexMaxY - complexMinY) * (clientY / (clientMaxY - clientMinY))
+        fractalRange[0] + (fractalRange[2] - fractalRange[0]) * (clientCoords[0] / (clientRange[2] - clientRange[0])),
+        fractalRange[1] + (fractalRange[3] - fractalRange[1]) * (clientCoords[1] / (clientRange[3] - clientRange[1]))
     ];
 }
 
-function mandelbrot(x, y) {
+function mandelbrot(clientCoords, clientRange) {
     const maxIterations = 100;
     const escapeMagnitude = 2;
 
     let c = translateClientToFractal(
-        [ x, y ],
+        clientCoords,
         clientRange,
         [ -2.2, -1.4, 0.8, 1.4 ]);
 
@@ -63,13 +59,13 @@ function mandelbrot(x, y) {
     return iterations;
 }
 
-function julia(x, y, debug) {
+function julia(clientCoords, clientRange) {
     const maxIterations = 100;
     const escapeMagnitude = 2;
 
     let iterations = 0;
     let z = translateClientToFractal(
-        [ x, y ],
+        clientCoords,
         clientRange,
         [ 0 - escapeMagnitude, 0 - escapeMagnitude, escapeMagnitude, escapeMagnitude ]);
     //let c = [ -0.7, 0.27015 ];
@@ -92,10 +88,9 @@ function renderCpu() {
 
     for (let x = 0; x < canvas.width; x++) {
         for (let y = 0; y < canvas.height; y++) {
-//            let mandel = mandelbrot(x, y);
-//            const color = Math.floor((mandel / 100) * 255);
-            let jul = julia(x, y);
-            const color = (jul == 100) ? 0 : Math.floor((jul / 100) * 255);
+            let result = julia([ x, y ], clientRange);
+//            const color = Math.floor((result / 100) * 255);
+            const color = (result == 100) ? 0 : Math.floor((result / 100) * 255);
 
             ctx.fillStyle = `rgba(${color}, ${color}, ${color}, 1)`;
             ctx.fillRect(x,y,1,1);
@@ -108,36 +103,28 @@ function renderCpu() {
 function renderGpu() {
     const gpu = new GPU();
     const clientSize = [ 500, 500 ];
+    const clientRange = [ 0, 0, 500, 500 ];
     const render = gpu.createKernel(function(clientX, clientY) {
         const maxIterations = 100;
         const escapeMagnitude = 2;
 
         const client = [ clientX, clientY ];
-/*
-    const cxMin = -2.2;
-    const cxMax =  0.8;
-    const cyMin = -1.2;
-    const cyMax =  1.2;
+        const clientRange = [ 0, 0, 500, 500 ];
 
-    let x = this.thread.x / sizeX;
-    let y = this.thread.y / sizeY;
+        let result = mandelbrot([ this.thread.x, this.thread.y ], clientRange) * 1.0;
 
-    */
-
-        let mandel = mandelbrot(this.thread.x, this.thread.y) * 1.0;
-
-        this.color((mandel / 100.0), (mandel / 100.0), (mandel / 100.0), 1);
+        this.color((result / 100.0), (result / 100.0), (result / 100.0), 1);
     })
-      .setOutput([clientSize.x, clientSize.y])
-      .addFunction(translateClientToFractal, { argumentTypes: { client: 'Array(2)', clientRangex: 'Array(4)', complexRange: 'Array(4)' }, returnType: 'Array(2)' })
+      .setOutput([ 500, 500 ])
+      .addFunction(translateClientToFractal, { argumentTypes: { clientCoords: 'Array(2)', clientRange: 'Array(4)', fractalRange: 'Array(4)' }, returnType: 'Array(2)' })
       .addFunction(add, { argumentTypes: { c1: 'Array(2)', c2: 'Array(2)' }, returnType: 'Array(2)' })
       .addFunction(multiply, { argumentTypes: { c1: 'Array(2)', c2: 'Array(2)' }, returnType: 'Array(2)' })
       .addFunction(power, { argumentTypes: { c1: 'Array(2)', c2: 'Array(2)' }, returnType: 'Array(2)' })
       .addFunction(magnitude, { argumentTypes: { c: 'Array(2)' }, returnType: 'Number' })
-      .addFunction(mandelbrot, { argumentTypes: { c: 'Array(2)' }, returnType: 'Number' })
+      .addFunction(mandelbrot, { argumentTypes: { clientCoords: 'Array(2)', clientRange: 'Array(4)' }, returnType: 'Number' })
       .setGraphical(true);
 
-    render(clientSize.x, clientSize.y);
+    render(500, 500);
     return render.getCanvas();
 }
 
@@ -147,8 +134,11 @@ function mouseOver(event) {
 //    console.log({ clientX: event.clientX, clientY: event.clientY, cX: complex[0], cY: complex[1], mandel });
 
     const escapeMagnitude = 2;
-    let z = translateClientToFractal([ event.clientX, event.clientY ], clientRange, [ 0 - escapeMagnitude, 0 - escapeMagnitude, escapeMagnitude, escapeMagnitude ]);
-    const jul = julia(event.clientX, event.clientY, true);
+    let z = translateClientToFractal(
+        [ event.clientX, event.clientY ],
+        clientRange,
+        [ 0 - escapeMagnitude, 0 - escapeMagnitude, escapeMagnitude, escapeMagnitude ]);
+    const jul = mandelbrot([ event.clientX, event.clientY ], clientRange);
     console.log({ clientX: event.clientX, clientY: event.clientY, zX: z[0], zY: z[1], jul });
 }
 
@@ -156,7 +146,7 @@ function render() {
     const body = document.getElementsByTagName("body")[0];
     console.log(body);
 
-    const canvas = renderCpu();
+    const canvas = renderGpu();
     console.log(canvas);
 
     canvas.setAttribute("id", canvasId);
